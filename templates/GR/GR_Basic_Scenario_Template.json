@@ -1,0 +1,667 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "circuits": {
+            "type": "array"
+        },
+        "vNets": {
+            "type": "array"
+        },
+        "vm": {
+            "type": "object"
+        },
+        "alias": {
+            "type": "String",
+            "defaultValue": "amwate"
+        },
+        "baseName": {
+            "type": "String",
+            "defaultValue": "Ipv6"
+        }
+    },
+    "variables": {
+        "numberOfResources": "[length(parameters('circuits'))]",
+        "baseName": "[concat(parameters('alias'), '-', parameters('baseName'), '-')]",
+        "circuitProperties": {
+            "copy": [
+                {
+                    "name": "circuitName",
+                    "count": "[variables('numberOfResources')]",
+                    "input": {
+                        "name": "[concat(variables('baseName'), 'Circuit','-', parameters('circuits')[copyIndex('circuitName')].name,'-', parameters('circuits')[copyIndex('circuitName')].deviceType, '-',copyIndex('circuitName',1))]"
+                    }
+                }
+            ]
+        },
+        "vNetProperties": {
+            "copy": [
+                {
+                    "name": "vNetName",
+                    "count": "[variables('numberOfResources')]",
+                    "input": {
+                        "name": "[concat(variables('baseName'),'Vnet','-', copyIndex('vNetName',1))]"
+                    }
+                }
+            ]
+        },
+        "gwProperties": {
+            "copy": [
+                {
+                    "name": "names",
+                    "count": "[variables('numberOfResources')]",
+                    "input": {
+                        "gwName": "[concat(variables('baseName'),'GW','-', copyIndex('names',1))]",
+                        "subnetId": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vNetProperties').vNetName[copyIndex('names')].name, 'GatewaySubnet')]",
+                        "gwIp": "[concat(variables('baseName'), 'GWIP', '-', copyIndex('names',1))]",
+                        "gwIpConfName": "[concat(variables('baseName'), 'GWIPConf', '-', copyIndex('names',1))]"
+                    }
+                }
+            ]
+        },
+        "connectionProperties": {
+            "copy": [
+                {
+                    "name": "ids",
+                    "count": "[variables('numberOfResources')]",
+                    "input": {
+                        "name": "[concat(variables('baseName'), 'connection', '-', copyIndex('ids',1))]",
+                        "gwId": "[resourceId('Microsoft.Network/virtualNetworkGateways',variables('gwProperties').names[copyIndex('ids')].gwName)]",
+                        "circuitId": "[resourceId('Microsoft.Network/expressRouteCircuits', variables('circuitProperties').circuitName[copyIndex('ids')].name)]"
+                    }
+                }
+            ]
+        },
+        "vMProperties": {
+            "copy": [
+                {
+                    "name": "names",
+                    "count": "[variables('numberOfResources')]",
+                    "input": {
+                        "publicIpName": "[concat(variables('baseName'), 'publicIpAddress', '-', copyIndex('names',1))]",
+                        "availabilitySetName": "[concat(variables('baseName'), 'availabilitySet', '-', copyIndex('names',1))]",
+                        "vmName": "[concat(variables('baseName'), 'vm', '-', copyIndex('names',1))]",
+                        "lbPIPName": "[concat(variables('baseName'), 'lbpip', '-', copyIndex('names',1))]",
+                        "lbPIPv6Name": "[concat(variables('baseName'), 'lbpipv6', '-', copyIndex('names',1))]",
+                        "loadbalancer": "[concat(variables('baseName'), 'loadbalancer', '-', copyIndex('names',1))]",
+                        "nsg": "[concat(variables('baseName'), 'nsg', '-', copyIndex('names',1))]",
+                        "subnetId": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vNetProperties').vNetName[copyIndex('names')].name, 'Default')]",
+                        "storageAccount": "[concat('straccount', copyIndex('names',1))]"
+                    }
+                }
+            ]
+        }
+    },
+    "resources": [
+        // Circuits
+        {
+            "type": "Microsoft.Network/expressRouteCircuits",
+            "apiVersion": "2020-05-01",
+            "name": "[variables('circuitProperties').circuitName[copyIndex()].name]",
+            "location": "[parameters('circuits')[copyIndex()].location]",
+            "sku": {
+                "name": "[parameters('circuits')[copyIndex()].sku.name]",
+                "tier": "[parameters('circuits')[copyIndex()].sku.tier]",
+                "family": "[parameters('circuits')[copyIndex()].sku.family]"
+            },
+            "copy": {
+                "name": "CircuitCopy",
+                "count": "[length(parameters('circuits'))]",
+                "mode": "Parallel"
+            },
+            "properties": {
+                "peerings": [
+                    {
+                        "name": "AzurePrivatePeering",
+                        "properties": {
+                            "peeringType": "AzurePrivatePeering",
+                            "peerASN": 100,
+                            "primaryPeerAddressPrefix": "[parameters('circuits')[copyIndex()].peering.primaryPeerAddressPrefix]",
+                            "secondaryPeerAddressPrefix": "[parameters('circuits')[copyIndex()].peering.secondaryPeerAddressPrefix]",
+                            "state": "Enabled",
+                            "vlanId": 200,
+                            "ipv6PeeringConfig": {
+                                "primaryPeerAddressPrefix": "[parameters('circuits')[copyIndex()].peering.primaryPeerAddressPrefixV6]",
+                                "secondaryPeerAddressPrefix": "[parameters('circuits')[copyIndex()].peering.secondaryPeerAddressPrefixV6]",
+                                "state": "Enabled"
+                            }
+                        }
+                    }
+                ],
+                "authorizations": [],
+                "serviceProviderProperties": {
+                    "serviceProviderName": "[parameters('circuits')[copyIndex()].serviceProviderProperties.serviceProviderName]",
+                    "peeringLocation": "[parameters('circuits')[copyIndex()].serviceProviderProperties.peeringLocation]",
+                    "bandwidthInMbps": 200
+                },
+                "allowClassicOperations": false
+            }
+        },
+        // Peerings
+        {
+            "type": "Microsoft.Network/expressRouteCircuits/peerings",
+            "apiVersion": "2020-05-01",
+            "name": "[concat(variables('circuitProperties').circuitName[copyIndex()].name, '/AzurePrivatePeering')]",
+            "dependsOn": [
+                "CircuitCopy"
+            ],
+            "copy": {
+                "name": "PeeringCopy",
+                "count": "[length(parameters('circuits'))]"
+            },
+            "properties": {
+                "peeringType": "AzurePrivatePeering",
+                "peerASN": 100,
+                "primaryPeerAddressPrefix": "[parameters('circuits')[copyIndex()].peering.primaryPeerAddressPrefix]",
+                "secondaryPeerAddressPrefix": "[parameters('circuits')[copyIndex()].peering.secondaryPeerAddressPrefix]",
+                "state": "Enabled",
+                "vlanId": 200,
+                "ipv6PeeringConfig": {
+                    "primaryPeerAddressPrefix": "[parameters('circuits')[copyIndex()].peering.primaryPeerAddressPrefixV6]",
+                    "secondaryPeerAddressPrefix": "[parameters('circuits')[copyIndex()].peering.secondaryPeerAddressPrefixV6]",
+                    "state": "Enabled"
+                }
+            }
+        },
+        // Vnets
+        {
+            "apiVersion": "2018-08-01",
+            "type": "Microsoft.Network/virtualNetworks",
+            "name": "[variables('vNetProperties').vNetName[copyIndex()].name]",
+            "location": "[resourceGroup().location]",
+            "copy": {
+                "name": "vnetCopy",
+                "count": "[length(parameters('vNets'))]",
+                "mode": "Parallel"
+            },
+            "properties": {
+                "dhcpOptions": {
+                    "dnsServers": [ "df5:43::", "df5:45::" ]
+                },
+                "addressSpace": {
+                    "addressPrefixes": [
+                        "[parameters('vNets')[copyIndex()].vnetv6AddressRange]",
+                        "[parameters('vNets')[copyIndex()].vnetv4AddressRange]"
+                    ]
+                },
+                "subnets": [
+                    {
+                        "name": "GatewaySubnet",
+                        "properties": {
+                            "addressPrefixes": [
+                                "[parameters('vNets')[copyIndex()].gwSubnetv4AddressRange]",
+                                "[parameters('vNets')[copyIndex()].gwSubnetv6AddressRange]"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "Default",
+                        "properties": {
+                            "addressPrefixes": [
+                                "[parameters('vNets')[copyIndex()].defaultSubnetv4AddressRange]",
+                                "[parameters('vNets')[copyIndex()].defaultSubnetv6AddressRange]"
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        //
+        // GW
+        //
+        // GW Public IP
+        {
+            "type": "Microsoft.Network/publicIPAddresses",
+            "apiVersion": "2020-05-01",
+            "name": "[variables('gwProperties').names[copyIndex()].gwIp]",
+            "location": "[resourceGroup().location]",
+            "sku": {
+                "name": "Standard"
+            },
+            "copy": {
+                "name": "GatewayIpLoop",
+                "count": "[variables('numberOfResources')]"
+            },
+            "properties": {
+                "publicIPAddressVersion": "IPv4",
+                "publicIPAllocationMethod": "Static"
+            }
+        },
+        // GW IpConf
+        {
+            "type": "Microsoft.Network/virtualNetworkGateways",
+            "apiVersion": "2020-05-01",
+            "name": "[variables('gwProperties').names[copyIndex()].gwName]",
+            "location": "[resourceGroup().location]",
+            "copy": {
+                "name": "GatewayLoop",
+                "count": "[variables('numberOfResources')]"
+            },
+            "dependsOn": [
+                "PeeringCopy",
+                "vnetCopy",
+                "GatewayIpLoop"
+            ],
+            "properties": {
+                "ipConfigurations": [
+                    {
+                        "name": "[variables('gwProperties').names[copyIndex()].gwIpConfName]",
+                        "properties": {
+                            "privateIPAllocationMethod": "Dynamic",
+                            "publicIPAddress": {
+                                "id": "[resourceId('Microsoft.Network/publicIPAddresses',variables('gwProperties').names[copyIndex()].gwIp)]"
+                            },
+                            "subnet": {
+                                "id": "[variables('gwProperties').names[copyIndex()].subnetId]"
+                            }
+                        }
+                    }
+                ],
+                "sku": {
+                    "name": "ErGw2AZ",
+                    "tier": "ErGw2AZ"
+                },
+                "gatewayType": "ExpressRoute",
+                "vpnType": "PolicyBased"
+            }
+        },
+        // Connections
+        {
+            "type": "Microsoft.Network/connections",
+            "apiVersion": "2020-05-01",
+            "name": "[variables('connectionProperties').ids[copyIndex()].name]",
+            "location": "[resourceGroup().location]",
+            "copy": {
+                "name": "connectionLoop",
+                "count": "[variables('numberOfResources')]"
+            },
+            "dependsOn": [
+                "GatewayLoop",
+                "PeeringCopy"
+            ],
+            "properties": {
+                "virtualNetworkGateway1": {
+                    "id": "[variables('connectionProperties').ids[copyIndex()].gwId]"
+                },
+                "connectionType": "ExpressRoute",
+                "routingWeight": 0,
+                "peer": {
+                    "id": "[variables('connectionProperties').ids[copyIndex()].circuitId]"
+                },
+                "expressRouteGatewayBypass": false,
+                "dpdTimeoutSeconds": 0
+            }
+        },
+        //
+        // VM
+        //
+        // VM Public IPs
+        {
+            "apiVersion": "2020-05-01",
+            "type": "Microsoft.Network/publicIPAddresses",
+            "name": "[variables('vMProperties').names[copyIndex()].publicIpName]",
+            "copy": {
+                "name": "publicIpLoop",
+                "count": "[variables('numberOfResources')]"
+            },
+            "location": "[resourceGroup().location]",
+            "properties": {
+                "publicIPAllocationMethod": "Dynamic"
+            }
+        },
+        // LB Public IP
+        {
+            "apiVersion": "2020-05-01",
+            "type": "Microsoft.Network/publicIPAddresses",
+            "name": "[variables('vMProperties').names[copyIndex()].lbPIPName]",
+            "copy": {
+                "name": "lbPIPLoop",
+                "count": "[variables('numberOfResources')]"
+            },
+            "location": "[resourceGroup().location]",
+            "properties": {
+                "publicIPAllocationMethod": "Dynamic"
+            }
+        },
+        // LB v6 Public IP
+        {
+            "apiVersion": "2020-05-01",
+            "type": "Microsoft.Network/publicIPAddresses",
+            "name": "[variables('vMProperties').names[copyIndex()].lbPIPv6Name]",
+            "copy": {
+                "name": "lbPIPv6Loop",
+                "count": "[variables('numberOfResources')]"
+            },
+            "location": "[resourceGroup().location]",
+            "properties": {
+                "publicIPAllocationMethod": "Dynamic",
+                "publicIPAddressVersion": "IPv6"
+            }
+        },
+        // VM Availability Set
+        {
+            "type": "Microsoft.Compute/availabilitySets",
+            "name": "[variables('vMProperties').names[copyIndex()].availabilitySetName]",
+            "apiVersion": "2020-06-01",
+            "location": "[resourceGroup().location]",
+            "copy": {
+                "name": "availabilitySetLoop",
+                "count": "[variables('numberOfResources')]"
+            },
+            "properties": {
+                "platformFaultDomainCount": "2",
+                "platformUpdateDomainCount": "5"
+            },
+            "sku": {
+                "name": "Aligned"
+            }
+        },
+        // Optional Storage
+        /* {
+            "apiVersion": "2019-06-01",
+            "type": "Microsoft.Storage/storageAccounts",
+            "name": "[variables('vMProperties').names[copyIndex()].storageAccount]",
+            "location": "[resourceGroup().location]",
+            "sku": {
+                "name": "Standard_LRS"
+            }, 
+            "copy": {
+            "name": "storageAccountLoop",
+                "count": "[variables('numberOfResources')]"
+            },
+            "kind": "StorageV2",
+            "properties": {}
+        },
+      */
+        // VM Load Balancer
+        {
+            "apiVersion": "2020-05-01",
+            "name": "[variables('vMProperties').names[copyIndex()].loadBalancer]",
+            "type": "Microsoft.Network/loadBalancers",
+            "location": "[resourceGroup().location]",
+            "dependsOn": [
+                "lbPIPLoop",
+                "lbPIPv6Loop"
+            ],
+            "copy": {
+                "name": "lbLoop",
+                "count": "[variables('numberOfResources')]"
+            },
+            "properties": {
+                "frontendIpConfigurations": [
+                    {
+                        "name": "LBFE",
+                        "properties": {
+                            "publicIPAddress": {
+                                "id": "[resourceId('Microsoft.Network/publicIPAddresses', variables('vMProperties').names[copyIndex()].lbPIPName)]"
+                            }
+                        }
+                    },
+                    {
+                        "name": "LBFE-v6",
+                        "properties": {
+                            "publicIPAddress": {
+                                "id": "[resourceId('Microsoft.Network/publicIPAddresses',variables('vMProperties').names[copyIndex()].lbPIPv6Name)]"
+                            }
+                        }
+                    }
+                ],
+                "backendAddressPools": [
+                    {
+                        "name": "LBBAP"
+                    },
+                    {
+                        "name": "LBBAP-v6"
+                    }
+                ],
+                "loadBalancingRules": [
+                    {
+                        "properties": {
+                            "frontendIPConfiguration": {
+                                "id": "[resourceId('Microsoft.Network/loadBalancers/frontendIpConfigurations', variables('vMProperties').names[copyIndex()].loadBalancer, 'LBFE')]"
+                            },
+                            "backendAddressPool": {
+                                "id": "[resourceId('Microsoft.Network/loadBalancers/backendAddressPools', variables('vMProperties').names[copyIndex()].loadBalancer, 'LBBAP')]"
+                            },
+                            "protocol": "Tcp",
+                            "frontendPort": 80,
+                            "backendPort": 80,
+                            "idleTimeoutInMinutes": 15
+                        },
+                        "name": "lbrule"
+                    },
+                    {
+                        "properties": {
+                            "frontendIPConfiguration": {
+                                "id": "[resourceId('Microsoft.Network/loadBalancers/frontendIpConfigurations', variables('vMProperties').names[copyIndex()].loadBalancer, 'LBFE-v6')]"
+                            },
+                            "backendAddressPool": {
+                                "id": "[resourceId('Microsoft.Network/loadBalancers/backendAddressPools', variables('vMProperties').names[copyIndex()].loadBalancer, 'LBBAP-v6')]"
+                            },
+                            "protocol": "Tcp",
+                            "frontendPort": 80,
+                            "backendPort": 80
+                        },
+                        "name": "lbrule-v6"
+                    }
+                ]
+            }
+        },
+        // VM NSG Rules
+        {
+            "apiVersion": "2020-05-01",
+            "type": "Microsoft.Network/networkSecurityGroups",
+            "name": "[variables('vMProperties').names[copyIndex()].nsg]",
+            "location": "[resourceGroup().location]",
+            "copy": {
+                "name": "nsgLoop",
+                "count": "[variables('numberOfResources')]"
+            },
+            "properties": {
+                "securityRules": [
+                    {
+                        "name": "allow-HTTP-in",
+                        "properties": {
+                            "description": "Allow HTTP",
+                            "protocol": "TCP",
+                            "sourcePortRange": "80",
+                            "destinationPortRange": "80",
+                            "sourceAddressPrefix": "*",
+                            "destinationAddressPrefix": "*",
+                            "access": "Allow",
+                            "priority": 1001,
+                            "direction": "Inbound"
+                        }
+                    },
+                    {
+                        "name": "allow-all-out",
+                        "properties": {
+                            "description": "Allow out All",
+                            "protocol": "*",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "*",
+                            "sourceAddressPrefix": "*",
+                            "destinationAddressPrefix": "*",
+                            "access": "Allow",
+                            "priority": 1002,
+                            "direction": "Outbound"
+                        }
+                    },
+                    {
+                        "name": "allow-RDP-in",
+                        "properties": {
+                            "description": "Allow RDP",
+                            "protocol": "Tcp",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "3389",
+                            "sourceAddressPrefix": "*",
+                            "destinationAddressPrefix": "*",
+                            "access": "Allow",
+                            "priority": 1003,
+                            "direction": "Inbound"
+                        }
+                    },
+                    {
+                        "name": "allow-MyIpv6App-out",
+                        "properties": {
+                            "description": "Allow My IPv6 App",
+                            "protocol": "Tcp",
+                            "sourcePortRange": "33819-33829",
+                            "destinationPortRange": "5000-6000",
+                            "sourceAddressPrefix": "ace:cab:deca:deed::/64",
+                            "destinationAddressPrefixes": [ "cab:cab:aaaa:bbbb::/64", "cab:cab:1111:2222::/64" ],
+                            "access": "Allow",
+                            "priority": 1004,
+                            "direction": "Outbound"
+                        }
+                    }
+                ]
+            }
+        },
+        // Optional Route Table
+        {
+            "type": "Microsoft.Network/routeTables",
+            "name": "v6routeTable",
+            "apiVersion": "2020-05-01",
+            "location": "[resourceGroup().location]",
+            "properties": {
+                "routes": [
+                    {
+                        "name": "v6route",
+                        "properties": {
+                            "addressPrefix": "cab:cab::/96",
+                            "nextHopType": "VirtualAppliance",
+                            "nextHopIpAddress": "ace:cab:deca:f00d::1"
+                        }
+                    }
+                ]
+            }
+        },
+        // VM Network Interfaces
+        {
+            "apiVersion": "2020-05-01",
+            "type": "Microsoft.Network/networkInterfaces",
+            "name": "[concat(variables('vMProperties').names[copyIndex()].vmName,copyIndex())]",
+            "copy": {
+                "name": "netIntLoop",
+                "count": "[variables('numberOfResources')]"
+            },
+            "location": "[resourceGroup().location]",
+            "dependsOn": [
+                "publicIpLoop",
+                "nsgLoop",
+                "lbLoop",
+                "vnetCopy"
+            ],
+            "properties": {
+                "networkSecurityGroup": {
+                    "id": "[resourceId('Microsoft.Network/networkSecurityGroups',variables('vMProperties').names[copyIndex()].nsg)]"
+                },
+                "ipConfigurations": [
+                    {
+                        "name": "ipconfig-v4",
+                        "properties": {
+                            "privateIPAllocationMethod": "Dynamic",
+                            "privateIPAddressVersion": "IPv4",
+                            "primary": true,
+                            "publicIPAddress": {
+                                "id": "[resourceId('Microsoft.Network/publicIPAddresses',variables('vMProperties').names[copyIndex()].publicIpName)]"
+                            },
+                            "subnet": {
+                                "id": "[variables('vMProperties').names[copyIndex()].subnetId]"
+                            },
+                            "loadBalancerBackendAddressPools": [
+                                {
+                                    "id": "[resourceId('Microsoft.Network/loadBalancers/backendAddressPools', variables('vMProperties').names[copyIndex()].loadBalancer, 'LBBAP')]"
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        "name": "ipconfig-v6",
+                        "properties": {
+                            "privateIPAllocationMethod": "Dynamic",
+                            "privateIPAddressVersion": "IPv6",
+                            "subnet": {
+                                "id": "[variables('vMProperties').names[copyIndex()].subnetId]"
+                            },
+                            "loadBalancerBackendAddressPools": [
+                                {
+                                    "id": "[resourceId('Microsoft.Network/loadBalancers/backendAddressPools', variables('vMProperties').names[copyIndex()].loadBalancer, 'LBBAP-v6')]"
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        // Virtual Machines
+        {
+            "apiVersion": "2020-06-01",
+            "type": "Microsoft.Compute/virtualMachines",
+            "name": "[concat(variables('vMProperties').names[copyIndex()].vmName, copyindex())]",
+            "copy": {
+                "name": "virtualMachineLoop",
+                "count": "[variables('numberOfResources')]"
+            },
+            "location": "[resourceGroup().location]",
+            "dependsOn": [
+                "netIntLoop",
+                "availabilitySetLoop"
+            ],
+            "properties": {
+                "availabilitySet": {
+                    "id": "[resourceId('Microsoft.Compute/availabilitySets', variables('vMProperties').names[copyIndex()].availabilitySetName)]"
+                },
+                "hardwareProfile": {
+                    "vmSize": "[parameters('vm').vmSize]"
+                },
+                "osProfile": {
+                    "computerName": "[concat(parameters('vm').vmName, copyindex())]",
+                    "adminUsername": "[parameters('vm').username]",
+                    "adminPassword": "[parameters('vm').password]"
+                },
+                "storageProfile": {
+                    "imageReference": {
+                        "publisher": "[parameters('vm').imagePublisher]",
+                        "offer": "[parameters('vm').imageOffer]",
+                        "sku": "[parameters('vm').imageSku]",
+                        "version": "latest"
+                    },
+                    "osDisk": {
+                        "createOption": "FromImage"
+                    }
+                },
+                "networkProfile": {
+                    "networkInterfaces": [
+                        {
+                            "id": "[resourceId('Microsoft.Network/networkInterfaces',concat(variables('vMProperties').names[copyIndex()].vmName, copyIndex()))]"
+                        }
+                    ]
+                }
+            }
+        }
+    ],
+    "Outputs": {
+        "circuit": {
+            "value": "[variables('circuitProperties')]",
+            "type": "object"
+        },
+        "vNet": {
+            "value": "[variables('vNetProperties')]",
+            "type": "object"
+        },
+        "connectionProperty": {
+            "value": "[variables('connectionProperties')]",
+            "type": "object"
+        },
+        "gwProperties": {
+            "value": "[variables('gwProperties')]",
+            "type": "object"
+        },
+        "vmProperties": {
+            "value": "[variables('vMProperties')]",
+            "type": "object"
+        }
+    }
+}

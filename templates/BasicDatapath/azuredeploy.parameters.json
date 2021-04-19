@@ -1,0 +1,74 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "alias": {
+      "value": "amwate",
+      "type": "string"
+    },
+    "baseName": {
+      "value": "Ipv6BugBash",
+      "type": "string"
+    },
+    "circuits": {
+      "type": "object",
+      "value": 
+        {
+          "name": "Basic",
+          "deviceType": "Cisco",
+          "location": "Central India",
+          "sku": {
+            "name": "Premium_MeteredData",
+            "tier": "Premium",
+            "family": "MeteredData"
+          },
+          "peering": {
+            "primaryPeerAddressPrefix": "192.168.16.252/30",
+            "secondaryPeerAddressPrefix": "192.168.18.252/30",
+            "primaryPeerAddressPrefixV6": "3FFE:FFFF:0:CD30::/126",
+            "secondaryPeerAddressPrefixV6": "3FFE:FFFF:0:CD30::/126"
+          },
+          "serviceProviderProperties": {
+            "serviceProviderName": "BSNL",
+            "peeringLocation": "Chennai",
+            "bandwidthInMbps": 50 
+          }
+        }
+    },
+    "vNets": {
+      "type": "array",
+      "value": [
+        {
+          "vNetName": "Vnet",
+          "vnetv6AddressRange": "ace:cab:deab::/48",
+          "vnetv4AddressRange": "11.0.0.0/16",
+          "defaultSubnetv4AddressRange": "11.0.1.0/24",
+          "defaultSubnetv6AddressRange": "ace:cab:deab:deeb::/64",
+          "gwSubnetv4AddressRange": "11.0.2.0/27",
+          "gwSubnetv6AddressRange": "ace:cab:deab:deea::/64"
+        },
+        {
+          "vNetName": "Vnet",
+          "vnetv6AddressRange": "bce:cab:deab::/48",
+          "vnetv4AddressRange": "21.0.0.0/16",
+          "defaultSubnetv4AddressRange": "21.0.1.0/24",
+          "defaultSubnetv6AddressRange": "bce:cab:deab:deeb::/64",
+          "gwSubnetv4AddressRange": "21.0.2.0/27",
+          "gwSubnetv6AddressRange": "bce:cab:deab:deea::/64"
+        }
+      ]
+    },
+    "vm": {
+      "type": "object",
+      "value": {
+        "imagePublisher": "MicrosoftWindowsServer",
+        "imageOffer": "WindowsServer",
+        "imageSku": "2019-Datacenter",
+        "username": "azure",
+        "password": "Azure@12345",
+        "vmSize": "Standard_A1_v2",
+        "vmName": "PingVM"
+      }
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "vNets": {
+            "type": "object",
+            "value": {
+                "vNetName": "Vnet",
+                "vnetv6AddressRange": "ace:cab:deab::/48",
+                "vnetv4AddressRange": "11.0.0.0/16",
+                "defaultSubnetv4AddressRange": "11.0.1.0/24",
+                "defaultSubnetv6AddressRange": "ace:cab:deab:deeb::/64",
+                "gwSubnetv4AddressRange": "11.0.2.0/27",
+                "gwSubnetv6AddressRange": "ace:cab:deab:deea::/64",
+            }
+        }
+    }
+}

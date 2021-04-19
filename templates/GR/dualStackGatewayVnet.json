@@ -1,0 +1,116 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "vNets": {
+            "type": "object"
+        },
+        "alias": {
+            "type": "String",
+            "defaultValue": "amwate"
+        },
+        "baseName": {
+            "type": "String",
+            "defaultValue": "Ipv6"
+        }
+    },
+    "variables": {
+        "gw":{
+            "gwName":"[concat(parameters('vNets').vNetName, 'GW')]",
+            "publicIpName":"[concat(parameters('vNets').vNetName, 'publicIp')]",
+            "ipConfName":"[concat(parameters('vNets').vNetName, 'ipConfName')]"
+        },
+        
+        "subnetId": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vNets').vNetName, 'GatewaySubnet')]"
+    },
+    "resources": [
+        // Vnets
+        {
+            "apiVersion": "2018-08-01",
+            "type": "Microsoft.Network/virtualNetworks",
+            "name": "[parameters('vNets').vNetName]",
+            "location": "[resourceGroup().location]",
+            "properties": {
+                "dhcpOptions": {
+                    "dnsServers": [ "df5:43::", "df5:45::" ]
+                },
+                "addressSpace": {
+                    "addressPrefixes": [
+                        "[parameters('vNets').vnetv6AddressRange]",
+                        "[parameters('vNets').vnetv4AddressRange]"
+                    ]
+                },
+                "subnets": [
+                    {
+                        "name": "GatewaySubnet",
+                        "properties": {
+                            "addressPrefixes": [
+                                "[parameters('vNets').gwSubnetv4AddressRange]",
+                                "[parameters('vNets').gwSubnetv6AddressRange]"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "Default",
+                        "properties": {
+                            "addressPrefixes": [
+                                "[parameters('vNets').defaultSubnetv4AddressRange]",
+                                "[parameters('vNets').defaultSubnetv6AddressRange]"
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        //
+        // GW
+        //
+        // GW Public IP
+        {
+            "type": "Microsoft.Network/publicIPAddresses",
+            "apiVersion": "2020-05-01",
+            "name": "[variables('gw').publicIpName]",
+            "location": "[resourceGroup().location]",
+            "sku": {
+                "name": "Standard"
+            },
+           "properties": {
+                "publicIPAddressVersion": "IPv4",
+                "publicIPAllocationMethod": "Static"
+            }
+        },
+        // GW IpConf
+        {
+            "type": "Microsoft.Network/virtualNetworkGateways",
+            "apiVersion": "2020-05-01",
+            "name": "[variables('gw').gwName]",
+            "location": "[resourceGroup().location]",
+            "dependsOn": [
+                 "[resourceId('Microsoft.Network/publicIPAddresses',variables('gw').publicIpName)]"
+            ],
+            "properties": {
+                "ipConfigurations": [
+                    {
+                        "name": "[variables('gw').ipConfName]",
+                        "properties": {
+                            "privateIPAllocationMethod": "Dynamic",
+                            "publicIPAddress": {
+                                "id": "[resourceId('Microsoft.Network/publicIPAddresses',variables('gw').publicIpName)]"
+                            },
+                            "subnet": {
+                                "id": "[variables('subnetId')]"
+                            }
+                        }
+                    }
+                ],
+                "sku": {
+                    "name": "ErGw2AZ",
+                    "tier": "ErGw2AZ"
+                },
+                "gatewayType": "ExpressRoute",
+                "vpnType": "PolicyBased"
+            }
+        }
+    ],
+    "Outputs": {}
+}

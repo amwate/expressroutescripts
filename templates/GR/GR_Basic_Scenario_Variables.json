@@ -1,0 +1,118 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "circuits": {
+            "type": "array"
+        },
+        "vNets": {
+            "type": "array"
+        },
+        "vm": {
+            "type": "object"
+        },
+        "alias": {
+            "type": "String",
+            "defaultValue": "amwate"
+        },
+        "baseName": {
+            "type": "String",
+            "defaultValue": "Ipv6"
+        }
+    },
+    "variables": {
+        "numberOfResources": "[length(parameters('circuits'))]",
+        "baseName": "[concat(parameters('alias'), '-', parameters('baseName'), '-')]",
+        "circuitProperties": {
+            "copy": [
+                {
+                    "name": "circuitName",
+                    "count": "[variables('numberOfResources')]",
+                    "input": {
+                        "name": "[concat(variables('baseName'), 'Circuit','-', parameters('circuits')[copyIndex('circuitName')].name,'-', parameters('circuits')[copyIndex('circuitName')].deviceType, '-',copyIndex('circuitName',1))]"
+                    }
+                }
+            ]
+        },
+        "vNetProperties": {
+            "copy": [
+                {
+                    "name": "vNetName",
+                    "count": "[variables('numberOfResources')]",
+                    "input": {
+                        "name": "[concat(variables('baseName'),'Vnet','-', copyIndex('vNetName',1))]"
+                    }
+                }
+            ]
+        },
+        "gwProperties": {
+            "copy": [
+                {
+                    "name": "names",
+                    "count": "[variables('numberOfResources')]",
+                    "input": {
+                        "gwName": "[concat(variables('baseName'),'GW','-', copyIndex('names',1))]",
+                        "subnetId": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vNetProperties').vNetName[copyIndex('names')].name, 'GatewaySubnet')]",
+                        "gwIp": "[concat(variables('baseName'), 'GWIP', '-', copyIndex('names',1))]",
+                        "gwIpConfName": "[concat(variables('baseName'), 'GWIPConf', '-', copyIndex('names',1))]"
+                    }
+                }
+            ]
+        },
+        "connectionProperties": {
+            "copy": [
+                {
+                    "name": "ids",
+                    "count": "[variables('numberOfResources')]",
+                    "input": {
+                        "name": "[concat(variables('baseName'), 'connection', '-', copyIndex('ids',1))]",
+                        "gwId": "[resourceId('Microsoft.Network/virtualNetworkGateways',variables('gwProperties').names[copyIndex('ids')].gwName)]",
+                        "circuitId": "[resourceId('Microsoft.Network/expressRouteCircuits', variables('circuitProperties').circuitName[copyIndex('ids')].name)]"
+                    }
+                }
+            ]
+        },
+        "vMProperties": {
+            "copy": [
+                {
+                    "name": "names",
+                    "count": "[variables('numberOfResources')]",
+                    "input": {
+                        "publicIpName": "[concat(variables('baseName'), 'publicIpAddress', '-', copyIndex('names',1))]",
+                        "availabilitySetName": "[concat(variables('baseName'), 'availabilitySet', '-', copyIndex('names',1))]",
+                        "vmName": "[concat(variables('baseName'), 'vm', '-', copyIndex('names',1))]",
+                        "lbPIPName": "[concat(variables('baseName'), 'lbpip', '-', copyIndex('names',1))]",
+                        "lbPIPv6Name": "[concat(variables('baseName'), 'lbpipv6', '-', copyIndex('names',1))]",
+                        "loadbalancer": "[concat(variables('baseName'), 'loadbalancer', '-', copyIndex('names',1))]",
+                        "nsg": "[concat(variables('baseName'), 'nsg', '-', copyIndex('names',1))]",
+                        "subnetId": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vNetProperties').vNetName[copyIndex('names')].name, 'Default')]",
+                        "storageAccount": "[concat('straccount', copyIndex('names',1))]"
+                    }
+                }
+            ]
+        }
+    },
+    "resources": [],
+    "Outputs": {
+        "circuit": {
+            "value": "[variables('circuitProperties')]",
+            "type": "object"
+        },
+        "vNet": {
+            "value": "[variables('vNetProperties')]",
+            "type": "object"
+        },
+        "connectionProperty": {
+            "value": "[variables('connectionProperties')]",
+            "type": "object"
+        },
+        "gwProperties": {
+            "value": "[variables('gwProperties')]",
+            "type": "object"
+        },
+        "vmProperties": {
+            "value": "[variables('vMProperties')]",
+            "type": "object"
+        }
+    }
+}
